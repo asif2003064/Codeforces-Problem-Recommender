@@ -44,8 +44,7 @@ def get_user_group(rating):
     else:
         return 'D'
 
-
-def user_info(handle):
+def get_user_info(handle):
     url = f"{CODEFORCES_API_BASE_URL}user.info?handles={handle}"
     response = requests.get(url)
 
@@ -63,12 +62,22 @@ def user_info(handle):
 
     return {'error': 'User not found'}
 
+@api_view(['GET'])
+def user_info_view(request, handle):
+    user_data = get_user_info(handle)
+    if 'error' in user_data:
+        return Response(user_data, status=404)
+    return Response(user_data)
+
 def get_user_submissions(handle):
     url = f"{CODEFORCES_API_BASE_URL}user.status?handle={handle}"
-    response = requests.get(url)
-    data = response.json()
-    if data['status'] == 'OK':
-        return data['result']
+    try:
+        response = requests.get(url, timeout=15)
+        data = response.json()
+        if data.get('status') == 'OK':
+            return data['result']
+    except (requests.RequestException, json.JSONDecodeError, KeyError):
+        pass
     return []
 
 def analyze_submissions(submissions):
@@ -87,10 +96,13 @@ def analyze_submissions(submissions):
 
 def get_problems():
     url = f"{CODEFORCES_API_BASE_URL}problemset.problems"
-    response = requests.get(url)
-    data = response.json()
-    if data['status'] == 'OK':
-        return data['result']['problems']
+    try:
+        response = requests.get(url, timeout=15)
+        data = response.json()
+        if data.get('status') == 'OK':
+            return data['result']['problems']
+    except (requests.RequestException, json.JSONDecodeError, KeyError):
+        pass
     return []
 
 def recommend_problems(handle, user_rating, group, solved_problems, failed_topics, submission_count):
@@ -142,8 +154,8 @@ def recommend_problems(handle, user_rating, group, solved_problems, failed_topic
 
 @api_view(['GET'])
 def recommend_problems_view(request, handle):
-    # Call user_info without request
-    user_data = user_info(handle)
+    # Call get_user_info helper
+    user_data = get_user_info(handle)
     if 'error' in user_data:
         return Response(user_data, status=404)
 
@@ -163,7 +175,7 @@ def recommend_problems_view(request, handle):
         'struggle_topics': [topic for topic, _ in failed_topics.most_common(3)] if submission_count > 200 else []
     }
 
-    return JsonResponse(response_data)
+    return Response(response_data)
     
 
 def home(request):
